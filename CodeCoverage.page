@@ -1,0 +1,296 @@
+<apex:page >
+    
+   <apex:includeScript value="https://ajax.aspnetcdn.com/ajax/jQuery/jquery-3.3.1.min.js"/>  
+
+   <style>
+      
+  .button {
+  padding: 5px; 
+  font-size: 16px;
+  text-align: center;
+  cursor: pointer;
+  outline: none;
+  color: #fff;
+  background: #4CAF50;
+  border: none;
+  border-radius: 15px;
+  margin-right: 2%;
+  margin-bottom: 3%;
+    
+}
+
+.button:hover {background: #3e8e41}
+
+.button:active {
+  background: #3e8e41;
+  box-shadow: 0 5px #666;
+  transform: translateY(4px);
+}
+  
+
+table {
+    table-layout: auto;
+      font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+    
+    
+}
+
+td, th {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+    
+}
+
+th{
+    background-color: #707070;
+      font-size: 13px;
+      color: #FFFFFF;
+  }
+      
+tr:nth-child(even) {
+    background-color: #dddddd;
+}
+tr:nth-child(odd) {
+    background-color: white;
+}
+      
+.Title{
+ font-size: 22px;
+ color: #FFFFFF;
+ padding-left:25px;
+ 
+ }      
+      
+.obj_type_std{
+      color : #006400;
+      font-weight: bold;
+  }
+ .obj_type_cust{
+      color : #8B0000;
+      font-weight: bold;
+  }
+  .obj_type_stng{
+      color : #4B0082;
+      font-weight: bold;
+  }
+  .zeroPercent{
+       font-weight: bold;
+       background : #FF6347;
+       color: #FFFFFF;
+       }
+
+   .blink{
+       color:white;
+       font-weight: 900;
+       background-color:#2ecc71;
+       display : block;
+       animation-name : blinkAnim;
+       animation-duration : 0.5s;
+       animation-iteration-count: infinite;
+       
+       } 
+       
+       @keyframes blinkAnim{
+       from {color:white;}
+        to {color: #2ecc71;}
+        
+       }
+       
+</style>  
+  <script>    
+    jQuery(document).ready(function($) 
+    {
+        var counter = 1;
+       
+       $.ajax('/services/data/v33.0/tooling/query/?q=Select+id,ApexClassorTrigger.Name,NumLinesCovered,NumLinesUncovered+from+ApexCodeCoverageAggregate',
+        {
+          beforeSend: function(xhr) {            
+            xhr.setRequestHeader('Authorization', 'Bearer {!$Api.Session_ID}');
+          },
+          success: function(response) {
+              console.log(response);
+               $.each(response.records, function(index, record) {
+               
+                   var percent = 0;
+                   if(record.NumLinesCovered === 0){
+                       percent =0;
+                   }
+                   else{
+                        percent = (record.NumLinesCovered/(record.NumLinesCovered+record.NumLinesUncovered))*100;
+                   }
+                   $('#dataList').append(
+                                            '<tr>'+
+                                                    '<td>'+ counter  +'</td>'+
+                                                    '<td>'+record.ApexClassOrTrigger.Name+'</td>'+
+                                                    '<td>'+record.NumLinesCovered+'</td>'+
+                                                    '<td>'+record.NumLinesUncovered+'</td>'+
+                                                    '<td>'+Math.floor(percent)+'</td>'+
+                                                
+                                             '</tr>');
+                counter++;
+               
+             });
+              
+               //============================ Styling PERCENT Column
+              
+                $("#dataList td:nth-child(5)").each(function () {
+                            if ($(this).text() == 0) {
+                                $(this).addClass("zeroPercent");
+                            }
+                            else if($(this).text()>0 && $(this).text()<75){
+                                $(this).css({"background-color" : "#3498db","color":"#FFFFFF","font-weight":"900"});
+                                
+                            }
+                    else if($(this).text()>75 && $(this).text()<100){
+                        $(this).css({"background-color" : "#2ecc71","color":"#FFFFFF","font-weight":"900"});
+                    }
+                    
+                    else
+                    {
+                        $(this).addClass("blink");  
+                                
+                        }
+                
+                });
+              
+              //===============================
+              
+          },
+          error: function(response){
+           
+              console.log(response);
+           }
+        
+        });
+        
+        
+          
+    //======================== EXPORT DATA functionality 
+    $('#export').click(function(event) {
+        
+        //exportDataToCSV(event.target.id);
+  var titles = [];
+  var data = [];
+
+  /*
+   * Get the table headers, this will be CSV headers
+   * The count of headers will be CSV string separator
+   */
+  $('#dataList th').each(function() {
+    titles.push($(this).text());
+  });
+
+        console.log('Header Titles ',titles);
+  /*
+   * Get the actual data, this will contain all the data, in 1 array
+   */
+  $('#dataList td').each(function() {
+    data.push($(this).text());
+  });
+  
+  /*
+   * Convert our data to CSV string
+   */
+  var CSVString = prepCSVRow(titles, titles.length, '');
+  CSVString = prepCSVRow(data, titles.length, CSVString);
+
+  /*
+   * Make CSV downloadable
+   */
+  var downloadLink = document.createElement("a");
+  var blob = new Blob(["\ufeff", CSVString]);
+  var url = URL.createObjectURL(blob);
+  downloadLink.href = url;
+  downloadLink.download = "CodeCoverageReport.csv";
+
+  /*
+   * Actually download CSV
+   */
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+});
+
+   /*
+* Convert data array to CSV string
+* @param arr {Array} - the actual data
+* @param columnCount {Number} - the amount to split the data into columns
+* @param initial {String} - initial string to append to CSV string
+* return {String} - ready CSV string
+*/
+function prepCSVRow(arr, columnCount, initial) {
+  var row = ''; // this will hold data
+  var delimeter = ','; // data slice separator, in excel it's `;`, in usual CSv it's `,`
+  var newLine = '\r\n'; // newline separator for CSV row
+
+  /*
+   * Convert [1,2,3,4] into [[1,2], [3,4]] while count is 2
+   * @param _arr {Array} - the actual array to split
+   * @param _count {Number} - the amount to split
+   * return {Array} - splitted array
+   */
+  function splitArray(_arr, _count) {
+    var splitted = [];
+    var result = [];
+    _arr.forEach(function(item, idx) {
+      if ((idx + 1) % _count === 0) {
+        splitted.push(item);
+        result.push(splitted);
+        splitted = [];
+      } else {
+        splitted.push(item);
+      }
+    });
+    return result;
+  }
+  var plainArr = splitArray(arr, columnCount);
+  // don't know how to explain this
+  // you just have to like follow the code
+  // and you understand, it's pretty simple
+  // it converts `['a', 'b', 'c']` to `a,b,c` string
+  plainArr.forEach(function(arrItem) {
+    arrItem.forEach(function(item, idx) {
+      row += item + ((idx + 1) === arrItem.length ? '' : delimeter);
+    });
+    row += newLine;
+  });
+  return initial + row;
+}
+
+
+    //========================= End of EXPORT 
+    
+ 
+    }); //end of Doc Ready   
+    
+    </script>
+    
+     <div style="padding-bottom:50px; padding-top:25px; border-radius: 15px;background-color: #008CBA;">
+            <div class ="Title" style = "float:left">
+                    Code Coverage Report : Without Apex  
+            </div>
+    
+    
+            <button id="export" style="float: right;" class="button button2">Export to CSV</button>
+    </div>
+  <!-- Table Below  -->
+  <div style="padding-top:15px;">
+              <table id="dataList">
+              <tr>
+                  <th>Serial No</th>
+                <th>Name</th>
+                <th>Lines Covered</th>
+                  <th>Lines Uncovered</th>
+                <th>Percentage</th>
+                
+                  
+            </tr>
+              
+          </table>
+    </div>  
+    
+    
+</apex:page>
